@@ -13,7 +13,11 @@ client = discord.Client(intents=intents)
 # Initialize Anthropic client
 anthropic_client = Anthropic(api_key=os.environ.get("CLAUDE_API_KEY"))
 
-# Agent system prompt - your IGE Academy admin agent personality
+# Composio MCP configuration
+COMPOSIO_MCP_URL = os.environ.get("COMPOSIO_MCP_URL", "https://backend.composio.dev/api/v1/mcp")
+COMPOSIO_API_KEY = os.environ.get("COMPOSIO_API_KEY")
+
+# Agent system prompt
 SYSTEM_PROMPT = """You are the IGE Academy Administrative Assistant, an AI agent for Igiehon Elite (IGE) Basketball Academy.
 
 Your role:
@@ -23,11 +27,23 @@ Your role:
 - Answer questions about academy operations
 - Assist with parent/player communications
 
-Guidelines:
-- Always be professional and represent IGE Academy well
-- When drafting emails, use a professional but friendly tone
-- Include the academy name "Igiehon Elite Basketball Academy" in formal communications
-- Be helpful, organized, and proactive in suggesting solutions
+You have access to tools via Composio MCP including:
+- SendGrid: For sending professional emails
+- Gmail: For reading and managing emails
+- Google Calendar: For scheduling and events
+- Google Drive: For document management
+- Google Sheets: For data and records
+
+When sending emails:
+- Always use a professional but friendly tone
+- Include "Igiehon Elite Basketball Academy" in formal communications
+- Use the SendGrid tool to actually send emails when asked
+- Always confirm with the user before sending
+
+Email Signature to include in all outgoing emails:
+Best regards,
+IGE Academy Administrative Team
+Igiehon Elite Basketball Academy
 
 You are communicating via Discord DM with academy staff. Keep responses concise but thorough."""
 
@@ -54,6 +70,7 @@ def run_health_server():
 @client.event
 async def on_ready():
     print(f'{client.user} is now online and ready!')
+    print(f'Composio MCP: {"Connected" if COMPOSIO_API_KEY else "Not configured"}')
 
 @client.event
 async def on_message(message):
@@ -82,13 +99,37 @@ async def on_message(message):
     
     async with message.channel.typing():
         try:
-            # Call Claude Messages API directly
-            response = anthropic_client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=1024,
-                system=SYSTEM_PROMPT,
-                messages=conversations[user_id]
-            )
+            # Build MCP server config if Composio is available
+            mcp_config = []
+            extra_headers = {}
+            use_beta = False
+            
+            if COMPOSIO_API_KEY:
+                mcp_config = [{
+                    "type": "url",
+                    "url": COMPOSIO_MCP_URL,
+                    "name": "composio-mcp",
+                    "headers": {"x-api-key": COMPOSIO_API_KEY},
+                }]
+                use_beta = True
+            
+            # Call Claude with MCP tools if available
+            if use_beta and mcp_config:
+                response = anthropic_client.beta.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=4096,
+                    system=SYSTEM_PROMPT,
+                    messages=conversations[user_id],
+                    mcp_servers=mcp_config,
+                    betas=["mcp-client-2025-04-04"]
+                )
+            else:
+                response = anthropic_client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=4096,
+                    system=SYSTEM_PROMPT,
+                    messages=conversations[user_id]
+                )
             
             # Extract text response
             reply = ""
@@ -103,16 +144,20 @@ async def on_message(message):
             })
             
             # Send response back to Discord
+            if not reply:
+                reply = "I processed your request successfully!"
+            
             if len(reply) > 2000:
                 chunks = [reply[i:i+2000] for i in range(0, len(reply), 2000)]
                 for chunk in chunks:
                     await message.channel.send(chunk)
             else:
-                await message.channel.send(reply or "I processed your request!")
+                await message.channel.send(reply)
             
         except Exception as e:
             print(f"Error: {e}")
-            await message.channel.send(f"Sorry, I encountered an error: {str(e)[:200]}")
+            error_msg = str(e)[:200]
+            await message.channel.send(f"Sorry, I encountered an error: {error_msg}")
 
 # Start health check server
 Thread(target=run_health_server, daemon=True).start()

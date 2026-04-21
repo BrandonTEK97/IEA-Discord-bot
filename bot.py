@@ -109,7 +109,7 @@ async def on_message(message):
                     "type": "url",
                     "url": COMPOSIO_MCP_URL,
                     "name": "composio-mcp",
-                    "headers": {"x-api-key": COMPOSIO_API_KEY},
+                    "authorization_token": COMPOSIO_API_KEY,
                 }]
                 use_beta = True
             

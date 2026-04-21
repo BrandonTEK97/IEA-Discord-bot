@@ -105,14 +105,14 @@ async def on_message(message):
             use_beta = False
             
             if COMPOSIO_API_KEY:
+                mcp_url_with_key = f"{COMPOSIO_MCP_URL}?api_key={COMPOSIO_API_KEY}"
                 mcp_config = [{
                     "type": "url",
-                    "url": COMPOSIO_MCP_URL,
+                    "url": mcp_url_with_key,
                     "name": "composio-mcp",
-                    "authorization_token": COMPOSIO_API_KEY,
                 }]
                 use_beta = True
-            
+                
             # Call Claude with MCP tools if available
             if use_beta and mcp_config:
                 response = anthropic_client.beta.messages.create(

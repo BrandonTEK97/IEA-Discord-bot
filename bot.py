@@ -52,13 +52,13 @@ async def on_message(message):
     async with message.channel.typing():
         try:
             # Create agent session with message
-            session = anthropic_client.beta.managed_agents.sessions.create(
+            session = anthropic_client.beta.managed_agent.sessions.create(
                 agent_id=AGENT_ID,
                 environment_id=ENVIRONMENT_ID
             )
             
             # Send message to agent
-            response = anthropic_client.beta.managed_agents.sessions.messages.create(
+            response = anthropic_client.beta.managed_agent.sessions.messages.create(
                 session_id=session.id,
                 content=message.content
             )

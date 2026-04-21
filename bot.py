@@ -1,4 +1,5 @@
 import os
+import time
 import discord
 from anthropic import Anthropic
 from threading import Thread
@@ -24,7 +25,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.wfile.write(b'Bot is running!')
     
     def log_message(self, format, *args):
-        pass  # Suppress HTTP logs
+        pass
 
 def run_health_server():
     port = int(os.environ.get("PORT", 10000))
@@ -38,51 +39,64 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    # Ignore messages from the bot itself
     if message.author == client.user:
         return
     
-    # Only respond to DMs
     if not isinstance(message.channel, discord.DMChannel):
         return
     
     print(f"Received DM from {message.author}: {message.content}")
     
-    # Show typing indicator
     async with message.channel.typing():
         try:
-            # Create agent session with message
-            session = anthropic_client.beta.managed_agent.sessions.create(
-                agent_id=AGENT_ID,
-                environment_id=ENVIRONMENT_ID
+            # Create a session using the correct Managed Agents API
+            session = anthropic_client.beta.sessions.create(
+                agent={"type": "agent", "id": AGENT_ID},
+                environment_id=ENVIRONMENT_ID,
             )
             
-            # Send message to agent
-            response = anthropic_client.beta.managed_agent.sessions.messages.create(
+            # Send user message as an event
+            anthropic_client.beta.sessions.events.send(
                 session_id=session.id,
-                content=message.content
+                events=[
+                    {
+                        "type": "user.message",
+                        "content": [{"type": "text", "text": message.content}],
+                    }
+                ],
             )
             
-            # Extract text response
+            # Stream the response
             reply = ""
-            for block in response.content:
-                if hasattr(block, 'text'):
-                    reply += block.text
+            with anthropic_client.beta.sessions.stream(
+                session_id=session.id,
+            ) as stream:
+                for event in stream:
+                    if event.type == "agent.message":
+                        for block in event.content:
+                            if hasattr(block, 'text'):
+                                reply += block.text
+                    elif event.type == "session.status_terminated":
+                        break
+                    elif event.type == "session.status_idle":
+                        break
             
-            # Send response back to Discord (split if too long)
+            # Send response back to Discord
+            if not reply:
+                reply = "I processed your request but had no text response."
+            
             if len(reply) > 2000:
-                # Discord has 2000 char limit, split message
                 chunks = [reply[i:i+2000] for i in range(0, len(reply), 2000)]
                 for chunk in chunks:
                     await message.channel.send(chunk)
             else:
-                await message.channel.send(reply or "I processed your request!")
+                await message.channel.send(reply)
             
         except Exception as e:
             print(f"Error: {e}")
-            await message.channel.send(f"Sorry, I encountered an error: {str(e)[:100]}")
+            await message.channel.send(f"Sorry, I encountered an error: {str(e)[:200]}")
 
-# Start health check server in background thread
+# Start health check server
 Thread(target=run_health_server, daemon=True).start()
 
 # Run the Discord bot

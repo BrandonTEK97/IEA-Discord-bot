@@ -1,6 +1,8 @@
 import os
 import discord
 from anthropic import Anthropic
+from threading import Thread
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Initialize Discord client
 intents = discord.Intents.default()
@@ -12,6 +14,23 @@ client = discord.Client(intents=intents)
 anthropic_client = Anthropic(api_key=os.environ.get("CLAUDE_API_KEY"))
 AGENT_ID = os.environ.get("AGENT_ID")
 ENVIRONMENT_ID = os.environ.get("ENVIRONMENT_ID", "academy-admin-env")
+
+# Simple HTTP server for Render health checks
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b'Bot is running!')
+    
+    def log_message(self, format, *args):
+        pass  # Suppress HTTP logs
+
+def run_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    print(f'Health check server running on port {port}')
+    server.serve_forever()
 
 @client.event
 async def on_ready():
@@ -63,5 +82,8 @@ async def on_message(message):
             print(f"Error: {e}")
             await message.channel.send(f"Sorry, I encountered an error: {str(e)[:100]}")
 
-# Run the bot
+# Start health check server in background thread
+Thread(target=run_health_server, daemon=True).start()
+
+# Run the Discord bot
 client.run(os.environ.get("DISCORD_BOT_TOKEN"))

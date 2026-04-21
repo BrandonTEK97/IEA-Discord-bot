@@ -48,10 +48,11 @@ def send_email(to_email, subject, body):
     """Send an email via SendGrid"""
     html_body = body.replace('\n', '<br>') + """
     <br><br>
-    <p>Best regards,<br>
-    <strong>IGE Academy Administrative Team</strong><br>
-    Igiehon Elite Basketball Academy</p>
-    <img src="https://i.imgur.com/ot785eY.jpeg" alt="IGE Academy" width="200">
+    <p>Kind regards,<br>
+    <strong>Aidan Igiehon</strong><br>
+    Chairman/Founder<br>
+    <a href="https://IgiehonEliteAcademy.com">IgiehonEliteAcademy.com</a></p>
+    <img src="https://i.imgur.com/ot785eY.jpeg" alt="IGE Academy" width="600">
     """
     
     message = Mail(
